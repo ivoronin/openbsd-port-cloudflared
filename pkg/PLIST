@@ -1,0 +1,10 @@
+@newgroup cloudflared:10900
+@rcscript ${RCDIR}/cloudflared
+@bin bin/cloudflared
+@man man/man1/cloudflared.1
+@extraunexec rm -rf /var/log/cloudflared/*
+@sample ${CONFDIR}/cloudflared/
+@owner nobody
+@group nobody
+@mode 750
+@sample /var/log/cloudflared/
