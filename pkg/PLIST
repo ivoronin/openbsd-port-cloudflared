@@ -1,10 +1,11 @@
-@newgroup cloudflared:10900
+@newgroup _cloudflared:8080
+@newuser _cloudflared:8080:8080:default:Cloudflare Daemon:/nonexistent:/sbin/nologin
 @rcscript ${RCDIR}/cloudflared
 @bin bin/cloudflared
 @man man/man1/cloudflared.1
 @extraunexec rm -rf /var/log/cloudflared/*
 @sample ${CONFDIR}/cloudflared/
-@owner nobody
-@group nobody
+@owner _cloudflared
+@group _cloudflared
 @mode 750
 @sample /var/log/cloudflared/
