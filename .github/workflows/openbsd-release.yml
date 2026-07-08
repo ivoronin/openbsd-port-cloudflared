@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -t packages < <(find .ci/openbsd-79/packages -type f -name 'cloudflared-*.tgz' | sort)
+          mapfile -t packages < <(find .ci/openbsd-79/packages/amd64/ftp -type f -name 'cloudflared-*.tgz' | sort)
           if [ "${#packages[@]}" -ne 1 ]; then
             printf 'expected exactly one cloudflared package, found %s\n' "${#packages[@]}" >&2
             printf '%s\n' "${packages[@]}" >&2
@@ -81,6 +81,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cloudflared-openbsd-7.9-amd64
-          path: .ci/openbsd-79/packages/**/cloudflared-*.tgz
+          path: .ci/openbsd-79/packages/amd64/ftp/cloudflared-*.tgz
           if-no-files-found: error
           retention-days: 14
