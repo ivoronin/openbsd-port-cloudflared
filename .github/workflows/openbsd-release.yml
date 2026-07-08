@@ -80,7 +80,7 @@ jobs:
       - name: Upload package artifact
         uses: actions/upload-artifact@v7.0.1
         with:
+          name: cloudflared-openbsd-7.9-amd64
           path: .ci/openbsd-79/packages/amd64/ftp/cloudflared-*.tgz
           if-no-files-found: error
           retention-days: 14
-          archive: false
