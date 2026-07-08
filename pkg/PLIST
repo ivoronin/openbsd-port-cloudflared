@@ -1,5 +1,5 @@
-@newgroup _cloudflared:8080
-@newuser _cloudflared:8080:8080:default:Cloudflare Daemon:/nonexistent:/sbin/nologin
+@newgroup _cloudflared:!8080
+@newuser _cloudflared:!8080:!8080:default:Cloudflare Daemon:/nonexistent:/sbin/nologin
 @rcscript ${RCDIR}/cloudflared
 @bin bin/cloudflared
 @man man/man1/cloudflared.1

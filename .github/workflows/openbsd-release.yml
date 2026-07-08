@@ -1,0 +1,84 @@
+name: OpenBSD package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  package-openbsd-79:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - uses: ivoronin/openbsd-action@v1
+        with:
+          release: "20260708"
+          image: openbsd-79-generic-full-amd64-bios-2bd66ca-202607080953.tar.gz
+          arch: amd64
+          run: |
+            set -eu
+
+            export PKG_PATH=https://cdn.openbsd.org/pub/OpenBSD/7.9/packages/amd64/
+            doas pkg_add -I go gmake
+
+            ftp -V -o /tmp/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/7.9/ports.tar.gz
+            cat >/tmp/ports.SHA256 <<'EOF'
+            SHA256 (/tmp/ports.tar.gz) = 937aef3d19bc288a838bfa168733872c1a33064db7fe00caf60ea29d9476c6db
+            EOF
+            sha256 -c /tmp/ports.SHA256
+
+            doas mkdir -p /usr
+            doas tar -C /usr -xzf /tmp/ports.tar.gz
+
+            if ! grep -q '^8080[[:space:]]' /usr/ports/infrastructure/db/user.list; then
+              printf '8080 _cloudflared\t\t_cloudflared\tmystuff/net/cloudflared\n' \
+                | doas tee -a /usr/ports/infrastructure/db/user.list >/dev/null
+            fi
+
+            doas mkdir -p /usr/ports/mystuff/net
+            doas chown openbsd:wheel /usr/ports/mystuff /usr/ports/mystuff/net
+
+            rm -rf /usr/ports/mystuff/net/cloudflared
+            mkdir -p /usr/ports/mystuff/net/cloudflared
+            cp -R /home/openbsd/work/. /usr/ports/mystuff/net/cloudflared/
+
+            ci_root=/home/openbsd/work/.ci/openbsd-79
+            mkdir -p "$ci_root/distfiles" "$ci_root/pobj" "$ci_root/packages" "$ci_root/plist"
+
+            cd /usr/ports/mystuff/net/cloudflared
+            make \
+              DISTDIR="$ci_root/distfiles" \
+              WRKOBJDIR="$ci_root/pobj" \
+              PACKAGE_REPOSITORY="$ci_root/packages" \
+              PLIST_REPOSITORY="$ci_root/plist" \
+              package
+
+            find "$ci_root/packages" -type f -name 'cloudflared-*.tgz' -print
+
+      - name: Upload package to release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t packages < <(find .ci/openbsd-79/packages -type f -name 'cloudflared-*.tgz' | sort)
+          if [ "${#packages[@]}" -ne 1 ]; then
+            printf 'expected exactly one cloudflared package, found %s\n' "${#packages[@]}" >&2
+            printf '%s\n' "${packages[@]}" >&2
+            exit 1
+          fi
+
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" \
+              --title "$TAG_NAME" \
+              --notes "OpenBSD package for $TAG_NAME"
+          fi
+
+          gh release upload "$TAG_NAME" "${packages[0]}" --clobber
