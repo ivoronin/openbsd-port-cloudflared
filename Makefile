@@ -18,6 +18,7 @@ USE_GMAKE = Yes
 
 MAKE_ENV +=	GOTOOLCHAIN=local
 MAKE_ENV +=	GOPROXY=invalid://ports.should.not.fetch.at.buildtime/
+MAKE_ENV +=	GOCACHE=${WRKDIR}/go-build-cache
 
 MAKE_FLAGS +=	VERSION=${GH_TAGNAME} \
 		DATE=${CLOUDFLARED_RELEASE_DATE}
