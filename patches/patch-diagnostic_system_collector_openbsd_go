@@ -1,0 +1,179 @@
+--- /dev/null	Wed Jul  9 00:00:00 2026
++++ diagnostic/system_collector_openbsd.go	Wed Jul  9 00:00:00 2026
+@@ -0,0 +1,176 @@
++//go:build openbsd
++
++package diagnostic
++
++import (
++	"context"
++	"fmt"
++	"os/exec"
++	"runtime"
++	"strconv"
++	"strings"
++)
++
++type SystemCollectorImpl struct {
++	version string
++}
++
++func NewSystemCollectorImpl(
++	version string,
++) *SystemCollectorImpl {
++	return &SystemCollectorImpl{
++		version,
++	}
++}
++
++func (collector *SystemCollectorImpl) Collect(ctx context.Context) (*SystemInformation, error) {
++	memoryInfo, memoryInfoRaw, memoryInfoErr := collectMemoryInformation(ctx)
++	fdInfo, fdInfoRaw, fdInfoErr := collectFileDescriptorInformation(ctx)
++	disks, disksRaw, diskErr := collectDiskVolumeInformationUnix(ctx)
++	osInfo, osInfoRaw, osInfoErr := collectOSInformationUnix(ctx)
++
++	var memoryMaximum, memoryCurrent, fileDescriptorMaximum, fileDescriptorCurrent uint64
++	var osSystem, name, osVersion, osRelease, architecture string
++	gerror := SystemInformationGeneralError{}
++
++	if memoryInfoErr != nil {
++		gerror.MemoryInformationError = SystemInformationError{
++			Err:     memoryInfoErr,
++			RawInfo: memoryInfoRaw,
++		}
++	} else {
++		memoryMaximum = memoryInfo.MemoryMaximum
++		memoryCurrent = memoryInfo.MemoryCurrent
++	}
++
++	if fdInfoErr != nil {
++		gerror.FileDescriptorsInformationError = SystemInformationError{
++			Err:     fdInfoErr,
++			RawInfo: fdInfoRaw,
++		}
++	} else {
++		fileDescriptorMaximum = fdInfo.FileDescriptorMaximum
++		fileDescriptorCurrent = fdInfo.FileDescriptorCurrent
++	}
++
++	if diskErr != nil {
++		gerror.DiskVolumeInformationError = SystemInformationError{
++			Err:     diskErr,
++			RawInfo: disksRaw,
++		}
++	}
++
++	if osInfoErr != nil {
++		gerror.OperatingSystemInformationError = SystemInformationError{
++			Err:     osInfoErr,
++			RawInfo: osInfoRaw,
++		}
++	} else {
++		osSystem = osInfo.OsSystem
++		name = osInfo.Name
++		osVersion = osInfo.OsVersion
++		osRelease = osInfo.OsRelease
++		architecture = osInfo.Architecture
++	}
++
++	cloudflaredVersion := collector.version
++	info := NewSystemInformation(
++		memoryMaximum,
++		memoryCurrent,
++		fileDescriptorMaximum,
++		fileDescriptorCurrent,
++		osSystem,
++		name,
++		osVersion,
++		osRelease,
++		architecture,
++		cloudflaredVersion,
++		runtime.Version(),
++		runtime.GOARCH,
++		disks,
++	)
++
++	return info, gerror
++}
++
++func collectMemoryInformation(ctx context.Context) (
++	*MemoryInformation,
++	string,
++	error,
++) {
++	const (
++		physmemKey  = "hw.physmem"
++		freeKey     = "vm.uvmexp.free"
++		pageSizeKey = "hw.pagesize"
++		kiloBytes   = 1024
++	)
++
++	physmem, physmemRaw, err := collectSysctlUint(ctx, physmemKey)
++	if err != nil {
++		return nil, physmemRaw, err
++	}
++
++	freePages, freeRaw, err := collectSysctlUint(ctx, freeKey)
++	if err != nil {
++		return nil, physmemRaw + freeRaw, err
++	}
++
++	pageSize, pageSizeRaw, err := collectSysctlUint(ctx, pageSizeKey)
++	raw := physmemRaw + freeRaw + pageSizeRaw
++	if err != nil {
++		return nil, raw, err
++	}
++
++	memoryMaximum := physmem / kiloBytes
++	memoryAvailable := (freePages * pageSize) / kiloBytes
++	var memoryCurrent uint64
++	if memoryAvailable < memoryMaximum {
++		memoryCurrent = memoryMaximum - memoryAvailable
++	}
++
++	return &MemoryInformation{memoryMaximum, memoryCurrent}, raw, nil
++}
++
++func collectFileDescriptorInformation(ctx context.Context) (
++	*FileDescriptorInformation,
++	string,
++	error,
++) {
++	const (
++		fileDescriptorMaximumKey = "kern.maxfiles"
++		fileDescriptorCurrentKey = "kern.num_files"
++	)
++
++	fileDescriptorMaximum, maximumRaw, err := collectSysctlUint(ctx, fileDescriptorMaximumKey)
++	if err != nil {
++		return nil, maximumRaw, err
++	}
++
++	fileDescriptorCurrent, currentRaw, err := collectSysctlUint(ctx, fileDescriptorCurrentKey)
++	raw := maximumRaw + currentRaw
++	if err != nil {
++		return nil, raw, err
++	}
++
++	return &FileDescriptorInformation{fileDescriptorMaximum, fileDescriptorCurrent}, raw, nil
++}
++
++func collectSysctlUint(
++	ctx context.Context,
++	key string,
++) (uint64, string, error) {
++	command := exec.CommandContext(ctx, "sysctl", "-n", key)
++
++	stdout, err := command.Output()
++	output := string(stdout)
++	if err != nil {
++		return 0, output, fmt.Errorf("error retrieving output from command '%s': %w", command.String(), err)
++	}
++
++	value, err := strconv.ParseUint(strings.TrimSpace(output), 10, 64)
++	if err != nil {
++		return 0, output, fmt.Errorf("error parsing sysctl key '%s': %w", key, err)
++	}
++
++	return value, output, nil
++}

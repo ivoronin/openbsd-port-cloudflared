@@ -1,20 +1,13 @@
---- Makefile.orig	Sat Jun 25 07:24:45 2022
-+++ Makefile	Sat Jun 25 08:24:36 2022
-@@ -48,7 +48,7 @@
- PACKAGE_DIR    := $(CURDIR)/packaging
- PREFIX         := /usr
- INSTALL_BINDIR := $(PREFIX)/bin/
--INSTALL_MANDIR := $(PREFIX)/share/man/man1/
-+INSTALL_MANDIR := $(PREFIX)/man/man1/
- 
- LOCAL_ARCH ?= $(shell uname -m)
- ifneq ($(GOARCH),)
-@@ -82,6 +82,8 @@
-     TARGET_OS ?= windows
- else ifeq ($(LOCAL_OS),freebsd)
-     TARGET_OS ?= freebsd
-+else ifeq ($(LOCAL_OS),openbsd)
-+    TARGET_OS ?= openbsd
- else
-     $(error This system's OS $(LOCAL_OS) isn't supported)
- endif
+--- Makefile.orig	Wed Jul  8 13:10:20 2026
++++ Makefile	Wed Jul  9 00:00:00 2026
+@@ -4,2 +4,2 @@
+-VERSION       := $(shell git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
+-MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
++VERSION       ?= $(shell git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
++MSI_VERSION   ?= $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
+@@ -29 +29 @@
+-	DATE := $(shell git log -1 --format="%ad" --date=format-local:'%Y-%m-%dT%H:%M UTC' -- RELEASE_NOTES)
++	DATE ?= $(shell git log -1 --format="%ad" --date=format-local:'%Y-%m-%dT%H:%M UTC' -- RELEASE_NOTES)
+@@ -31 +31 @@
+-	DATE := $(shell date -u -r RELEASE_NOTES '+%Y-%m-%d-%H:%M UTC')
++	DATE ?= $(shell date -u -r RELEASE_NOTES '+%Y-%m-%d-%H:%M UTC')

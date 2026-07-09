@@ -1,0 +1,81 @@
+name: OpenBSD package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ivoronin/openbsd-action@a305c89cdda257960449bc1d945267580118771c # v1.1
+        with:
+          release: "20260708"
+          image: openbsd-79-generic-full-amd64-bios-2bd66ca-202607080953.tar.gz
+          arch: amd64
+          ports: true
+          ports-archive-url-prefix: https://cdn.openbsd.org/pub/OpenBSD/7.9
+          run: |
+            set -eu
+
+            doas pkg_add -I go gmake
+
+            printf '8080 _cloudflared\t\t_cloudflared\tmystuff/net/cloudflared\n' \
+              | doas tee -a /usr/ports/infrastructure/db/user.list >/dev/null
+
+            mkdir -p /usr/ports/mystuff/net/cloudflared
+            cp -R /home/openbsd/work/. /usr/ports/mystuff/net/cloudflared/
+
+            ci_root=/home/openbsd/work/.ci/openbsd-79
+            mkdir -p "$ci_root/distfiles" "$ci_root/pobj" "$ci_root/packages" "$ci_root/plist"
+
+            cd /usr/ports/mystuff/net/cloudflared
+            make \
+              DISTDIR="$ci_root/distfiles" \
+              WRKOBJDIR="$ci_root/pobj" \
+              PACKAGE_REPOSITORY="$ci_root/packages" \
+              PLIST_REPOSITORY="$ci_root/plist" \
+              package
+
+            find "$ci_root/packages" -type f -name 'cloudflared-*.tgz' -print
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cloudflared-openbsd-7.9-amd64
+          path: .ci/openbsd-79/packages/amd64/ftp/cloudflared-*.tgz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cloudflared-openbsd-7.9-amd64
+          path: dist
+
+      - name: Attest package
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist/cloudflared-*.tgz
+
+      - name: Publish release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        with:
+          files: dist/cloudflared-*.tgz
+          fail_on_unmatched_files: true

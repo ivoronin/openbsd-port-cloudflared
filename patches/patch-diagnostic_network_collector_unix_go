@@ -1,0 +1,5 @@
+--- diagnostic/network/collector_unix.go.orig	Wed Jul  8 13:10:20 2026
++++ diagnostic/network/collector_unix.go	Wed Jul  9 00:00:00 2026
+@@ -1 +1 @@
+-//go:build darwin || linux
++//go:build darwin || linux || openbsd
